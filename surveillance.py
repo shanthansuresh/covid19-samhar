@@ -1,12 +1,19 @@
 import cv2
 from nnmodel import NNModel
+from stats import Stats
+from webserver import webserver_run
 #import matplotlib.pyplot as plt
 import numpy as np
 from pyheatmap.heatmap import HeatMap
+import thread
 
 MYVIDEO='crowd.mp4'
 #MYVIDEO='crowd_5fps.avi'
 SCALING_FACTOR=8
+
+def webserver_thread(thread_name):
+  print("Starting {}".format(thread_name))
+  webserver_run()
 
 def video_init(video_file_path):
   cap = cv2.VideoCapture(video_file_path)
@@ -103,10 +110,19 @@ def process_loop(video_file_path):
   model = NNModel()
   model.init()
 
+  #Create a stats class object
+  stats = Stats('static/images')
+
+  #Run the webserver
+  #thread.start_new_thread(webserver_thread, ('webserver_thread', ))
+
+  dbg_count = 0
   i = 0
   while(cap.isOpened()):
     ret, img = cap.read()
+    
     if ret == True:
+      print("Processing frame:{}".format(i))
       cv2.imshow('Frame', img)
 
       img_orig = img
@@ -114,10 +130,13 @@ def process_loop(video_file_path):
       output = model.run(img)
       #plot_output(output)
       num_ppl = count_people(output)
+      #num_ppl = i
       #print("num_ppl={}".format(num_ppl))
       #dump_output(img, i, num_ppl)
 
-      heatmap(img_orig, output, i, num_ppl)
+      stats.update(i, num_ppl)
+
+      #heatmap(img_orig, output, i, num_ppl)
 
       i = i + 1 
 
@@ -127,7 +146,20 @@ def process_loop(video_file_path):
     else:
       break
 
+    #Update plot for every 50 frames
+    if ((i>0) and (i%50 == 0)):
+      stats.update_plot()
+
+    
+    if dbg_count > 250:
+      break
+    dbg_count = dbg_count + 1
+    
+
+  #stats.update_plot()
   video_deinit(cap)
 
 if __name__ == '__main__':
-  process_loop(MYVIDEO)
+  #process_loop(MYVIDEO)
+  thread.start_new_thread(process_loop, (MYVIDEO, ))
+  webserver_run()
